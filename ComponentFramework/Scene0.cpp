@@ -56,13 +56,15 @@ void Scene0::Update(const float deltaTime) {
 	static float elapsedTime = 0.0f;
 	elapsedTime += deltaTime;
 
-	marioModel = MMath::rotate(elapsedTime * 90.0f, Vec3(0.0f, 1.0f, 0.0f));
+	marioModel = MMath::translate(Vec3(5.0f, 0.0f, 0.0f)) * MMath::rotate(elapsedTime * 90.0f, Vec3(0.0f, 1.0f, 0.0f));
+	marioModel = MMath::translate(Vec3(-5.0f, 0.0f, 0.0f)) * MMath::rotate(elapsedTime * -90.0f, Vec3(0.0f, 1.0f, 0.0f));
 }
 
 void Scene0::Render() const {
 	switch (renderer->getRendererType()) {
 	case RendererType::VULKAN:
-		dynamic_cast<VulkanRenderer*>(renderer)->LoadUBO(camera->GetProjection(), camera->GetView(), marioModel, lightPos);
+		dynamic_cast<VulkanRenderer*>(renderer)->LoadUBO(0, camera->GetProjection(), camera->GetView(), marioModel, lightPos);
+		dynamic_cast<VulkanRenderer*>(renderer)->LoadUBO(1, camera->GetProjection(), camera->GetView(), skullModel, lightPos);
 		renderer->Render();
 		break;
 

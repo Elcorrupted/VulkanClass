@@ -15,6 +15,7 @@ class Scene0 : public Scene {
 private:
 	Renderer *renderer;
 	Matrix4 marioModel;
+	Matrix4 skullModel;
 	Camera* camera;
 	Vec4 lightPos[3];
 	

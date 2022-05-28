@@ -150,13 +150,14 @@ public:
     void OnDestroy();
     void Render();
 
-    void LoadUBO(const Matrix4& proj_, const Matrix4& view_, const Matrix4& model_, const Vec4 lightPos[]);
+    void LoadUBO(int modelNum, const Matrix4& proj_, const Matrix4& view_, const Matrix4& model_, const Vec4 lightPos[]);
     inline SDL_Window* GetWindow() { return window; }
 
 private:
     const size_t MAX_FRAMES_IN_FLIGHT = 2;
     std::vector<Vertex> vertices[2];
     std::vector<uint32_t> indices[2];
+
     SDL_Event sdlEvent;
     uint32_t windowWidth;
     uint32_t windowHeight;
@@ -167,9 +168,13 @@ private:
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     VkDevice device;
     VkRenderPass renderPass;
+
+    //Decides the layout of the stuff sent to the shaders including their bindings and type (texture,ubo,etc)
     VkDescriptorSetLayout descriptorSetLayout;
     VkDescriptorPool descriptorPool;
-    std::vector<VkDescriptorSet> descriptorSets;
+
+    //Need a new set for each model
+    std::vector<VkDescriptorSet> descriptorSets[2];
 
     std::unordered_map<const char*, VkPipeline> pipelinesMap;
     VkPipelineLayout pipelineLayout;
@@ -192,9 +197,12 @@ private:
     std::unordered_map<Models, ModelVertexData> modelsMap;
     std::unordered_map<Textures, TextureData> TextureMap;
 
-    UniformBufferObject ubo;
+    UniformBufferObject ubo[2];
+    //Really just the uboBuffers
     std::vector<VkBuffer> uniformBuffers;
+    //Holds the location of the unifororBuffers
     std::vector<VkDeviceMemory> uniformBuffersMemory;
+
     std::vector<VkCommandBuffer> commandBuffers;
     std::vector<VkSemaphore> imageAvailableSemaphores;
     std::vector<VkSemaphore> renderFinishedSemaphores;
@@ -213,7 +221,6 @@ private:
     void createSwapChain();
     void recreateSwapChain();
     void createRenderPass();
-    void createDescriptorSetLayout();
     void createCommandPool();
     void createGraphicsPipeline(const char* name, const char* vertFileName, const char* fragFileName);
 
@@ -246,7 +253,9 @@ private:
     void createDescriptorPool();
 
     //Change texture here to change the rendered models texture
-    void createDescriptorSets();
+    void createDescriptorSets(Models modelNum, Textures bindingTexture);
+    //Layout of ubo and textureSampler here
+    void createDescriptorSetLayout();
 
     void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
     void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);

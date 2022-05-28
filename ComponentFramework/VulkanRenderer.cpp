@@ -47,6 +47,7 @@ void VulkanRenderer::Render() {
         throw std::runtime_error("failed to acquire swap chain image!");
     }
 
+    //Uses the object that holds the UBO buffer memory to allocate all the UBO data to the UBO buffer
     updateUniformBuffer(imageIndex);
 
     if (imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
@@ -153,10 +154,11 @@ void VulkanRenderer::initVulkan() {
     //Creating uniform to send to the shader files
     createUniformBuffers();
 
+    //I believe this decides how many uniform buffers and textures to send
     createDescriptorPool();
-    createDescriptorSets();
+	createDescriptorSets(Mario, Mario_Tex);
+	createDescriptorSets(Skull, Skull_Tex);
 
-    //createCommandBuffers(Mario);
     createCommandBuffers(Mario);
     createSyncObjects();
 }
@@ -264,8 +266,8 @@ void VulkanRenderer::recreateSwapChain() {
     createFramebuffers();
     createUniformBuffers();
     createDescriptorPool();
-    createDescriptorSets();
-    //createCommandBuffers(Mario);
+    createDescriptorSets(Mario, Mario_Tex);
+    createDescriptorSets(Skull, Skull_Tex);
     createCommandBuffers(Mario);
 }
 
@@ -521,21 +523,27 @@ void VulkanRenderer::createRenderPass() {
     }
 }
 
+//Call for each model that uses a different layout when being rendered. Also needs a new pipeline made for it.
 void VulkanRenderer::createDescriptorSetLayout() {
     VkDescriptorSetLayoutBinding uboLayoutBinding{};
+    //Used in the shaders to decide which module it should be in (vertex/frag)
     uboLayoutBinding.binding = 0;
     uboLayoutBinding.descriptorCount = 1;
+    //Tells us type to be made
     uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     uboLayoutBinding.pImmutableSamplers = nullptr;
     uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
     VkDescriptorSetLayoutBinding samplerLayoutBinding{};
+    //Used in the shaders to decide which module it should be in (vertex/frag)
     samplerLayoutBinding.binding = 1;
     samplerLayoutBinding.descriptorCount = 1;
+    //Tells us type to be made
     samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     samplerLayoutBinding.pImmutableSamplers = nullptr;
     samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
+    //Change if we are changing how many layouts are being used.
     std::array<VkDescriptorSetLayoutBinding, 2> bindings = { uboLayoutBinding, samplerLayoutBinding };
     VkDescriptorSetLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -559,15 +567,18 @@ void VulkanRenderer::createGraphicsPipeline(const char* name, const char* vertFi
     VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
     vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    //Module created from the passed in vert shader
     vertShaderStageInfo.module = vertShaderModule;
     vertShaderStageInfo.pName = "main";
 
     VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
     fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    //Module created from the passed in frag shader
     fragShaderStageInfo.module = fragShaderModule;
     fragShaderStageInfo.pName = "main";
 
+    //Used in pipeline info to describe how many files are in use
     VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
@@ -645,15 +656,20 @@ void VulkanRenderer::createGraphicsPipeline(const char* name, const char* vertFi
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+
+    //How many descriptor sets are to be used in this pipeline
     pipelineLayoutInfo.setLayoutCount = 1;
+    //Ubo and shader layout. Created by the createDescriptorSetLayout function
     pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
 
+    
     if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
         throw std::runtime_error("failed to create pipeline layout!");
     }
 
     VkGraphicsPipelineCreateInfo pipelineInfo{};
     pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    //How many files are being used in the rendering/shading process
     pipelineInfo.stageCount = 2;
     pipelineInfo.pStages = shaderStages;
     pipelineInfo.pVertexInputState = &vertexInputInfo;
@@ -1060,6 +1076,7 @@ void VulkanRenderer::createUniformBuffers() {
     }
 }
 
+//Call if we are changing what we are sending to the shader. Currently sending a UBO and texture.
 void VulkanRenderer::createDescriptorPool() {
     std::array<VkDescriptorPoolSize, 2> poolSizes{};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1071,42 +1088,45 @@ void VulkanRenderer::createDescriptorPool() {
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes = poolSizes.data();
-    poolInfo.maxSets = static_cast<uint32_t>(swapChainImages.size());
+    poolInfo.maxSets = static_cast<uint32_t>(swapChainImages.size() * 2);
 
     if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
         throw std::runtime_error("failed to create descriptor pool!");
     }
 }
 
-void VulkanRenderer::createDescriptorSets() {
+//Call for each model. Have to change different aspects if we are using different layouts, pipelines, or pools.
+void VulkanRenderer::createDescriptorSets(Models modelNum, Textures bindingTexture) {
     std::vector<VkDescriptorSetLayout> layouts(swapChainImages.size(), descriptorSetLayout);
     VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    //Only one type of pool being used right now
     allocInfo.descriptorPool = descriptorPool;
     allocInfo.descriptorSetCount = static_cast<uint32_t>(swapChainImages.size());
     allocInfo.pSetLayouts = layouts.data();
 
-    descriptorSets.resize(swapChainImages.size());
-    if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
+    descriptorSets[modelNum].resize(swapChainImages.size());
+    if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets[modelNum].data()) != VK_SUCCESS) {
         throw std::runtime_error("failed to allocate descriptor sets!");
     }
 
     for (size_t i = 0; i < swapChainImages.size(); i++) {
+        //Ubo to be used
         VkDescriptorBufferInfo bufferInfo{};
         bufferInfo.buffer = uniformBuffers[i];
-        bufferInfo.offset = 0;
+        bufferInfo.offset = sizeof(UniformBufferObject) * modelNum;
         bufferInfo.range = sizeof(UniformBufferObject);
 
         //Texture to be used
         VkDescriptorImageInfo imageInfo{};
         imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imageInfo.imageView = TextureMap[Mario_Fire_Tex].textureImageView;
-        imageInfo.sampler = TextureMap[Mario_Fire_Tex].textureSampler;
+        imageInfo.imageView = TextureMap[bindingTexture].textureImageView;
+        imageInfo.sampler = TextureMap[bindingTexture].textureSampler;
 
         std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
 
         descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrites[0].dstSet = descriptorSets[i];
+        descriptorWrites[0].dstSet = descriptorSets[modelNum][i];
         descriptorWrites[0].dstBinding = 0;
         descriptorWrites[0].dstArrayElement = 0;
         descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1114,7 +1134,7 @@ void VulkanRenderer::createDescriptorSets() {
         descriptorWrites[0].pBufferInfo = &bufferInfo;
 
         descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrites[1].dstSet = descriptorSets[i];
+        descriptorWrites[1].dstSet = descriptorSets[modelNum][i];
         descriptorWrites[1].dstBinding = 1;
         descriptorWrites[1].dstArrayElement = 0;
         descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -1247,22 +1267,27 @@ void VulkanRenderer::createCommandBuffers(Models modelNum) {
         //Clears the screen/sets background color, begins the passing
         vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-        //Bind the used shader
+        //Bind the used shaderFiles
         vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelinesMap["MultiLightShader"]);
 
-        VkBuffer vertexBuffers[] = { modelsMap[modelNum].vertexBufferObj };
-        VkDeviceSize offsets[] = { 0 };
+        VkBuffer vertexBuffers[] = { modelsMap[Mario].vertexBufferObj, modelsMap[Skull].vertexBufferObj };
+        VkDeviceSize offsets[] = { 0, sizeof(modelsMap[Mario].vertexBufferObj) };
 
-        //Bind the vertices buffer
-        vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffers, offsets);
-
-        //Bind the indices buffer
-        vkCmdBindIndexBuffer(commandBuffers[i], modelsMap[modelNum].indexBufferObj, 0, VK_INDEX_TYPE_UINT32);
+        //Vertices
+        vkCmdBindVertexBuffers(commandBuffers[i], 0, 2, vertexBuffers, offsets);
+        //Texture index
+        vkCmdBindIndexBuffer(commandBuffers[i], modelsMap[Mario].indexBufferObj, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[Mario][i] , 0, nullptr);
+		vkCmdDrawIndexed(commandBuffers[i], static_cast<uint32_t>(indices[Mario].size()), 1, 0, 0, 0);
+        //Texture index 2
+        vkCmdBindIndexBuffer(commandBuffers[i], modelsMap[Skull].indexBufferObj, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[Skull][i] , 0, nullptr);
+		vkCmdDrawIndexed(commandBuffers[i], static_cast<uint32_t>(indices[Skull].size()), 1, 0, 0, 0);
 
         //Bind the descriptors
-        vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[i], 0, nullptr);
 
-        vkCmdDrawIndexed(commandBuffers[i], static_cast<uint32_t>(indices[modelNum].size()), 1, 0, 0, 0);
+        //Draw call
+/*        vkCmdDrawIndexed(commandBuffers[i], static_cast<uint32_t>(indices[Mario].size() + indices[Skull].size()), 2, 0, 0, 0);*/
 
         //Done
         vkCmdEndRenderPass(commandBuffers[i]);
@@ -1296,7 +1321,7 @@ void VulkanRenderer::createSyncObjects() {
 }
 
 void VulkanRenderer::updateUniformBuffer(uint32_t currentImage) {
-    /// This is quick timer.
+	/// This is quick timer.
    /* static auto startTime = std::chrono::high_resolution_clock::now();
     auto currentTime = std::chrono::high_resolution_clock::now();
     float elapsedTime = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();*/    
@@ -1307,18 +1332,18 @@ void VulkanRenderer::updateUniformBuffer(uint32_t currentImage) {
     vkUnmapMemory(device, uniformBuffersMemory[currentImage]);
 }
 
-void VulkanRenderer::LoadUBO(const Matrix4& proj_, const Matrix4& view_, const Matrix4& model_, const Vec4 lightPos_[]) {
-    ubo.proj = proj_;
-    ubo.view = view_;
-    ubo.model = model_;
+void VulkanRenderer::LoadUBO(int modelNum, const Matrix4& proj_, const Matrix4& view_, const Matrix4& model_, const Vec4 lightPos_[]) {
+    ubo[modelNum].proj = proj_;
+    ubo[modelNum].view = view_;
+    ubo[modelNum].model = model_;
     //Flips y-axis because vulkan has +y-axis down...
     //The two below are the same thing
     //ubo.proj[1][1] *= -1.0f;
-    ubo.proj[5] *= -1.0f;
+    ubo[modelNum].proj[5] *= -1.0f;
 
-    ubo.lightPos[0] = lightPos_[0];
-    ubo.lightPos[1] = lightPos_[1];
-    ubo.lightPos[2] = lightPos_[2];
+    ubo[modelNum].lightPos[0] = lightPos_[0];
+    ubo[modelNum].lightPos[1] = lightPos_[1];
+    ubo[modelNum].lightPos[2] = lightPos_[2];
 }
 
 VkShaderModule VulkanRenderer::createShaderModule(const std::vector<char>& code) {

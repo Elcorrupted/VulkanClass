@@ -12,7 +12,7 @@ layout(location = 0) out vec4 outColor;
 
 void main() { 
 	vec4 ks[3] = vec4[] (vec4(0.4, 0.0, 0.0, 0.0), vec4(0.0, 0.4, 0.0, 0.0), vec4(0.0, 0.0, 0.4, 0.0));
-	vec4 kd[3] = vec4[] (vec4(1.0, 0.0, 0.0, 0.0), vec4(0.0, 1.0, 0.0, 0.0), vec4(0.0, 0.0, 1.0, 0.0));
+	vec4 kd[3] = vec4[] (vec4(0.4, 0.0, 0.0, 0.0), vec4(0.0, 0.4, 0.0, 0.0), vec4(0.0, 0.0, 0.4, 0.0));
 	vec4 kt = texture(textureSampler, fragTexCoord);
 
 	vec4 ka = 0.1 * kt;
